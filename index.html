@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quake Viewer vr.0.01</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Poppins:wght@300;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            display: flex;
+            flex-direction: row;
+            height: 100vh;
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+        #map {
+            width: 75%;
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        #sidebar {
+            width: 25%;
+            background-color: #2c3e50;
+            padding: 20px;
+            height: 100%;
+            overflow-y: auto;
+            transition: width 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
+        }
+        #sidebar.collapsed {
+            width: 0;
+            padding: 0;
+            display: none;
+            box-shadow: none;
+        }
+        .earthquake-item {
+            background-color: #16a085;
+            margin: 10px 0;
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateX(30px);
+        }
+        .earthquake-item.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .earthquake-item:hover {
+            background-color: #1abc9c;
+            transform: scale(1.05);
+        }
+        .earthquake-item .magnitude {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        .earthquake-item .location {
+            font-weight: normal;
+        }
+        .earthquake-item .time {
+            font-size: 0.9em;
+            color: #bdc3c7;
+        }
+        .filter-section {
+            margin-bottom: 20px;
+        }
+        .filter-section input {
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            margin-top: 10px;
+            width: 100%;
+            background-color: #ecf0f1;
+            color: #34495e;
+        }
+        .toggle-button {
+            font-size: 20px;
+            cursor: pointer;
+            background: #1abc9c;
+            border: none;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+        .toggle-button:hover {
+            background-color: #16a085;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            width: 300px;
+            max-width: 90%;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-header {
+            font-weight: bold;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+        .close-modal {
+            color: #34495e;
+            font-size: 24px;
+            cursor: pointer;
+            float: right;
+        }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 999;
+        }
+        @media (max-width: 768px) {
+            #map {
+                width: 100%;
+                height: 50vh;
+            }
+            #sidebar {
+                width: 100%;
+                position: absolute;
+                bottom: 0;
+                box-shadow: none;
+            }
+            .earthquake-item {
+                margin: 5px;
+                font-size: 14px;
+            }
+            .toggle-button {
+                display: none;
+            }
+            #sidebar.collapsed {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="sidebar">
+        <div class="filter-section">
+            <label for="min-magnitude">最小マグニチュード:</label>
+            <input type="number" id="min-magnitude" value="0" min="0" max="10" />
+        </div>
+        <h3>地震リスト</h3>
+        <div id="earthquakeList"></div>
+        <button class="toggle-button" id="toggleSidebar">サイドバーを閉じる</button>
+    </div>
+    <div id="modal" class="modal">
+        <span class="close-modal" id="closeModal">&times;</span>
+        <h4 class="modal-header">地震詳細情報</h4>
+        <p id="modal-content"></p>
+    </div>
+    <div id="modalOverlay" class="modal-overlay"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script>
+        const apiUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson';
+        const map = L.map('map').setView([35.68, 139.76], 5);
+
+        // OpenStreetMap タイル
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let previousEarthquakes = []; // 前回の地震データ
+        const earthquakeList = document.getElementById('earthquakeList');
+        const modal = document.getElementById('modal');
+        const modalContent = document.getElementById('modal-content');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const closeModal = document.getElementById('closeModal');
+        const toggleSidebar = document.getElementById('toggleSidebar');
+        const markers = L.markerClusterGroup(); // MarkerClusterを利用
+
+        // マグニチュードに基づいて色を決定する関数
+        function getColor(magnitude) {
+            if (magnitude < 3) {
+                return '#1E90FF'; // 青
+            } else if (magnitude < 5) {
+                return '#FFA500'; // オレンジ
+            } else if (magnitude < 7) {
+                return '#FF4500'; // 赤オレンジ
+            } else {
+                return '#FF0000'; // 赤
+            }
+        }
+
+        // 発生時刻をフォーマットする関数
+        function formatTime(time) {
+            const date = new Date(time);
+            return date.toLocaleString('ja-JP'); // 日本語フォーマットに変換
+        }
+
+        // 地震情報の取得
+        async function fetchEarthquakeData() {
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                const earthquakes = data.features;
+                if (JSON.stringify(earthquakes) !== JSON.stringify(previousEarthquakes)) {
+                    previousEarthquakes = earthquakes; // 更新
+                    updateEarthquakeList(earthquakes);
+
+                    // 新しい地震情報があったら、地図の中心を更新
+                    if (earthquakes.length > 0) {
+                        const latestEarthquake = earthquakes[0];
+                        const lat = latestEarthquake.geometry.coordinates[1];
+                        const lon = latestEarthquake.geometry.coordinates[0];
+                        map.setView([lat, lon], 6, { animate: true });
+                    }
+                    updateMapMarkers(earthquakes);
+                }
+            } catch (error) {
+                console.error('エラーが発生しました: ', error);
+            }
+        }
+
+        // 地図のマーカーを更新
+        function updateMapMarkers(earthquakes) {
+            markers.clearLayers(); // マーカーをクリア
+            earthquakes.forEach(earthquake => {
+                const lat = earthquake.geometry.coordinates[1];
+                const lon = earthquake.geometry.coordinates[0];
+                const magnitude = earthquake.properties.mag;
+                const location = earthquake.properties.place;
+                const time = earthquake.properties.time;
+                const color = getColor(magnitude);
+                const radius = magnitude * 5;
+
+                const marker = L.circleMarker([lat, lon], {
+                    color: color,
+                    radius: radius,
+                    fillColor: color,
+                    fillOpacity: 0.6
+                }).bindPopup(`${location}<br>マグニチュード: ${magnitude}<br>発生時刻: ${formatTime(time)}`);
+                markers.addLayer(marker);
+            });
+
+            map.addLayer(markers);
+        }
+
+        // 地震リストの更新
+        function updateEarthquakeList(earthquakes) {
+            earthquakeList.innerHTML = '';
+            earthquakes.forEach(earthquake => {
+                const magnitude = earthquake.properties.mag;
+                const location = earthquake.properties.place;
+                const time = earthquake.properties.time;
+                const item = document.createElement('div');
+                item.classList.add('earthquake-item');
+                item.classList.add('visible');
+                item.innerHTML = `
+                    <div class="magnitude">M${magnitude}</div>
+                    <div class="location">${location}</div>
+                    <div class="time">${formatTime(time)}</div>
+                `;
+                item.addEventListener('click', () => {
+                    modalContent.innerHTML = `
+                        <strong>マグニチュード:</strong> ${magnitude} <br>
+                        <strong>場所:</strong> ${location} <br>
+                        <strong>発生時刻:</strong> ${formatTime(time)}
+                    `;
+                    modal.style.display = 'block';
+                    modalOverlay.style.display = 'block';
+                });
+                earthquakeList.appendChild(item);
+            });
+        }
+
+        closeModal.addEventListener('click', () => {
+            modal.style.display = 'none';
+            modalOverlay.style.display = 'none';
+        });
+
+        modalOverlay.addEventListener('click', () => {
+            modal.style.display = 'none';
+            modalOverlay.style.display = 'none';
+        });
+
+        toggleSidebar.addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        });
+
+        // 1分ごとにデータを更新
+        setInterval(fetchEarthquakeData, 60000);
+
+        // 最初のデータ取得
+        fetchEarthquakeData();
+    </script>
+</body>
+</html>
