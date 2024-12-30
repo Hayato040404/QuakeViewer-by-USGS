@@ -1,1 +1,1 @@
-# QuakeViewer-For-USGS
+# QuakeViewer-by-USGS
