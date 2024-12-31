@@ -25,29 +25,16 @@
 - **[Leaflet.js](https://leafletjs.com/)**: 地図表示用
 - **[USGS Earthquake API](https://earthquake.usgs.gov/fdsnws/event/1/)**: 地震データ取得用
 
-## インストール方法
-
-1. このリポジトリをクローンします。
-   ```bash
-   git clone https://github.com/your-username/earthquake-map-app.git
-   ```
-2. プロジェクトのディレクトリに移動します。
-   ```bash
-   cd earthquake-map-app
-   ```
-3. 必要な依存関係はありません。インターネット接続があればブラウザで動作します。
 
 ## 使用方法
 
-1. [index.html](https://hayato040404.github.io/QuakeViewer-by-USGS/) をブラウザで開きます。
-   ```bash
-   open index.html
-   ```
+1. [こちら](https://hayato040404.github.io/QuakeViewer-by-USGS/) をブラウザで開きます。
 2. 地図上に最新の地震情報が表示されます。
 3. サイドバーの地震リストから詳細を確認できます。
 4. 新しい地震が発生すると画面上部に通知が表示されます。
 
 ## ファイル構成
+htmlにすべて格納されています。
 
 ```
 .
