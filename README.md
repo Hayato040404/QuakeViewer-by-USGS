@@ -1,4 +1,4 @@
-
+# こちらはサービスを終了しました。
 
 
 # QuakeViewer by USGS
